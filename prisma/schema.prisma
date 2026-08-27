@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime    @default(now())
+  tempEmails   TempEmail[]
+}
+
+model TempEmail {
+  id            String    @id @default(cuid())
+  address       String    @unique
+  domain        String
+  remoteId      String    // provider account ID
+  remoteToken   String    // provider JWT token
+  password      String    // provider account password
+  provider      String    @default("mail.tm") // "mail.tm" | "mail.gw" | "guerrilla" | "display" (legacy)
+  isDisplayOnly Boolean   @default(false) // legacy display-only rows (no real inbox)
+  userId        String?
+  user          User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+  messages      Message[]
+
+  @@index([userId, createdAt])
+}
+
+model Message {
+  id           String    @id @default(cuid())
+  emailId      String
+  remoteId     String    // mail.tm message ID
+  fromName     String
+  fromEmail    String
+  subject      String
+  bodyPreview  String    // short preview
+  bodyText     String    // plain text version
+  bodyHtml     String    // raw HTML version (rendered in iframe)
+  isRead       Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  tempEmail    TempEmail @relation(fields: [emailId], references: [id], onDelete: Cascade)
+
+  @@unique([emailId, remoteId])
+  @@index([emailId])
+}
