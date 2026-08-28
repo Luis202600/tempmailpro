@@ -5,10 +5,43 @@ const globalForPrisma = globalThis as unknown as {
   dbInitPromise: Promise<void> | undefined
 }
 
+/**
+ * Resuelve la URL de la base de datos de forma segura para serverless.
+ *
+ * En Vercel el sistema de archivos es de solo lectura salvo en /tmp, por lo
+ * que una ruta relativa (o la ausencia de DATABASE_URL) impide abrir SQLite.
+ * En esos casos se usa automáticamente file:/tmp/tempmail.db (efímera):
+ * la app funciona y los datos se reinician en cada despliegue/arranque frío.
+ */
+function resolveDatabaseUrl(): string {
+  const raw = process.env.DATABASE_URL?.trim()
+  const onVercel = process.env.VERCEL === "1"
+
+  if (!raw) {
+    if (onVercel) {
+      console.warn(
+        "[db] DATABASE_URL no definida; usando file:/tmp/tempmail.db (efímera en Vercel)"
+      )
+    }
+    return "file:/tmp/tempmail.db"
+  }
+
+  const isRelative = raw.startsWith("file:") && !raw.startsWith("file:/")
+  if (isRelative && onVercel) {
+    console.warn(
+      "[db] DATABASE_URL relativa no es válida en Vercel (solo lectura); usando file:/tmp/tempmail.db"
+    )
+    return "file:/tmp/tempmail.db"
+  }
+
+  return raw
+}
+
 const baseClient =
   globalForPrisma.prisma ??
   new PrismaClient({
-    log: ['query'],
+    datasourceUrl: resolveDatabaseUrl(),
+    log: process.env.NODE_ENV === "production" ? [] : ["query"],
   })
 
 /**
